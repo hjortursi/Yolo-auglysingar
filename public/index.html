@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎄 Jólaauglýsingavélin - Endless Christmas Ads</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Snowfall effect -->
+  <div class="snowfall" id="snowfall"></div>
+
+  <div class="container">
+    <header>
+      <h1>🎄 Jólaauglýsingavélin</h1>
+      <p class="subtitle">Endalausar jólakveðjur frá íslenskum fyrirtækjum</p>
+    </header>
+
+    <main>
+      <!-- Radio Display -->
+      <div class="radio-display">
+        <div class="radio-header">
+          <span class="live-indicator" id="liveIndicator">● LIVE</span>
+          <span class="station-name">Jólarás 1</span>
+        </div>
+
+        <!-- Audio Visualizer -->
+        <div class="visualizer" id="visualizer">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+
+        <!-- Current Ad Display -->
+        <div class="current-ad" id="currentAd">
+          <p class="ad-text" id="adText">Ýttu á play til að hefja jólakveðjurnar...</p>
+          <p class="company-name" id="companyName"></p>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <!-- Play Button -->
+        <button class="play-button" id="playButton" aria-label="Play/Pause">
+          <span class="play-icon" id="playIcon">▶</span>
+        </button>
+
+        <!-- Funny Slider -->
+        <div class="slider-container">
+          <label for="funnySlider">
+            <span class="slider-label">Fyndnistig</span>
+            <span class="slider-emojis">
+              <span id="emojiLeft">😊</span>
+              <span id="emojiRight">🤣</span>
+            </span>
+          </label>
+          <input
+            type="range"
+            id="funnySlider"
+            min="1"
+            max="10"
+            value="5"
+            class="funny-slider"
+          >
+          <div class="slider-labels">
+            <span>Hefðbundið</span>
+            <span id="funnyValue">5</span>
+            <span>Brjálað</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="status" id="status">
+        <p id="statusText">Tilbúið að hefjast handa</p>
+        <div class="loading-bar" id="loadingBar"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-number" id="adCount">0</span>
+          <span class="stat-label">Auglýsingar lesnar</span>
+        </div>
+        <div class="stat">
+          <span class="stat-number" id="companyCount">0</span>
+          <span class="stat-label">Fyrirtæki sem senda kveðjur</span>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>🎅 Búið til með Gemini & ElevenLabs</p>
+      <p class="footer-note">Gleðileg jól og farsælt komandi ár!</p>
+    </footer>
+  </div>
+
+  <!-- Audio elements -->
+  <audio id="jingleAudio" loop></audio>
+  <audio id="speechAudio"></audio>
+
+  <script src="app.js"></script>
+</body>
+</html>
