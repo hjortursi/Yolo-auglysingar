@@ -23,7 +23,12 @@ let isPlaying = false;
 let adCount = 0;
 let companiesSet = new Set();
 let jingleLoaded = false;
-let currentAbortController = null;
+
+// Pre-generation buffer
+const BUFFER_SIZE = 4;
+const adBuffer = []; // Array of { adData, audioBlob }
+let isGenerating = false;
+let isPlayingAd = false;
 
 // Initialize snowfall
 function createSnowflakes() {
@@ -78,7 +83,7 @@ async function togglePlay() {
   }
 }
 
-function startPlaying() {
+async function startPlaying() {
   isPlaying = true;
   playButton.classList.add('playing');
   playIcon.textContent = '⏸';
@@ -86,8 +91,23 @@ function startPlaying() {
   visualizer.classList.add('active');
   radioDisplay.classList.add('active');
 
-  // Start the ad generation loop
-  generateAndPlayAd();
+  // Load jingle first (only once)
+  if (!jingleLoaded) {
+    setStatus('Hleð jólastefinu...', true);
+    await loadJingle();
+  }
+
+  // Start jingle
+  if (jingleAudio.src && jingleAudio.paused) {
+    jingleAudio.volume = 0.3;
+    jingleAudio.play().catch(e => console.log('Jingle play error:', e));
+  }
+
+  // Start filling the buffer
+  fillBuffer();
+
+  // Start playing ads from buffer
+  playNextAd();
 }
 
 function stopPlaying() {
@@ -102,77 +122,112 @@ function stopPlaying() {
   jingleAudio.pause();
   speechAudio.pause();
 
-  // Cancel any pending requests
-  if (currentAbortController) {
-    currentAbortController.abort();
-  }
-
-  setStatus('Í pásu - ýttu á play til að halda áfram');
+  setStatus(`Í pásu - ${adBuffer.length} auglýsingar í biðröð`);
   loadingBar.classList.remove('active');
 }
 
-async function generateAndPlayAd() {
+// Fill the buffer with pre-generated ads
+async function fillBuffer() {
+  // Don't start multiple fill operations
+  if (isGenerating) return;
+
+  while (isPlaying && adBuffer.length < BUFFER_SIZE) {
+    isGenerating = true;
+    updateBufferStatus();
+
+    try {
+      // Generate ad text
+      const adData = await generateAdText();
+
+      if (!isPlaying) break;
+
+      // Generate speech audio
+      const audioBlob = await generateSpeechBlob(adData.adText);
+
+      if (!isPlaying) break;
+
+      // Add to buffer
+      adBuffer.push({ adData, audioBlob });
+      updateBufferStatus();
+
+      console.log(`Buffer: ${adBuffer.length}/${BUFFER_SIZE} auglýsingar tilbúnar`);
+
+    } catch (error) {
+      console.error('Error pre-generating ad:', error);
+      // Wait a bit before retrying on error
+      await sleep(2000);
+    }
+  }
+
+  isGenerating = false;
+}
+
+// Play the next ad from the buffer
+async function playNextAd() {
   if (!isPlaying) return;
 
-  try {
-    // Step 1: Load jingle if not loaded
-    if (!jingleLoaded) {
-      setStatus('Hleð jólastefinu...', true);
-      await loadJingle();
-    }
+  // Wait for buffer to have content
+  if (adBuffer.length === 0) {
+    setStatus('Bý til auglýsingar...', true);
+    await waitForBuffer();
+  }
 
-    // Start playing jingle in background (loop)
-    if (jingleAudio.paused) {
-      jingleAudio.volume = 0.3;
-      jingleAudio.play().catch(e => console.log('Jingle play error:', e));
-    }
+  if (!isPlaying) return;
 
-    // Step 2: Generate ad text
-    setStatus('Bý til auglýsingu með Gemini...', true);
-    const adData = await generateAdText();
+  // Get next ad from buffer
+  const { adData, audioBlob } = adBuffer.shift();
 
-    if (!isPlaying) return;
+  // Trigger buffer refill in background
+  fillBuffer();
 
-    // Display the ad text
-    adText.textContent = adData.adText;
-    companyName.textContent = `— ${adData.companyName}`;
+  // Display the ad
+  adText.textContent = adData.adText;
+  companyName.textContent = `— ${adData.companyName}`;
 
-    // Update stats
-    adCount++;
-    companiesSet.add(adData.companyName);
-    adCountEl.textContent = adCount;
-    companyCountEl.textContent = companiesSet.size;
+  // Update stats
+  adCount++;
+  companiesSet.add(adData.companyName);
+  adCountEl.textContent = adCount;
+  companyCountEl.textContent = companiesSet.size;
 
-    // Step 3: Generate speech
-    setStatus('Þulur les upp auglýsinguna...', true);
+  // Play the speech
+  setStatus(`🎙️ Þulur talar... (${adBuffer.length} í biðröð)`, false);
 
-    // Lower jingle volume during speech
-    jingleAudio.volume = 0.15;
+  // Lower jingle volume during speech
+  jingleAudio.volume = 0.15;
 
-    await generateAndPlaySpeech(adData.adText);
+  await playAudioBlob(audioBlob);
 
-    if (!isPlaying) return;
+  if (!isPlaying) return;
 
-    // Raise jingle volume back up
-    jingleAudio.volume = 0.3;
+  // Raise jingle volume back
+  jingleAudio.volume = 0.3;
 
-    // Wait a moment before next ad
-    setStatus('Undirbý næstu auglýsingu...', false);
-    await sleep(2000);
+  // Brief pause between ads
+  await sleep(1500);
 
-    // Generate next ad
-    if (isPlaying) {
-      generateAndPlayAd();
-    }
+  // Play next ad
+  if (isPlaying) {
+    playNextAd();
+  }
+}
 
-  } catch (error) {
-    console.error('Error in ad generation:', error);
-    if (isPlaying) {
-      setStatus(`Villa: ${error.message}. Reyni aftur...`, false);
-      await sleep(3000);
-      if (isPlaying) {
-        generateAndPlayAd();
-      }
+// Wait for buffer to have at least one item
+async function waitForBuffer() {
+  while (adBuffer.length === 0 && isPlaying) {
+    await sleep(100);
+  }
+}
+
+// Update status with buffer info
+function updateBufferStatus() {
+  if (!isPlayingAd) {
+    if (adBuffer.length === 0) {
+      setStatus('Bý til auglýsingar...', true);
+    } else if (adBuffer.length < BUFFER_SIZE) {
+      setStatus(`Hleð auglýsingum... (${adBuffer.length}/${BUFFER_SIZE})`, true);
+    } else {
+      setStatus(`${adBuffer.length} auglýsingar tilbúnar`, false);
     }
   }
 }
@@ -194,7 +249,7 @@ async function loadJingle() {
 
   } catch (error) {
     console.error('Jingle load error:', error);
-    // Use a fallback - just continue without jingle
+    // Continue without jingle
     jingleLoaded = true;
   }
 }
@@ -216,31 +271,37 @@ async function generateAdText() {
   return response.json();
 }
 
-async function generateAndPlaySpeech(text) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const response = await fetch('/api/text-to-speech', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+// Generate speech and return blob (don't play yet)
+async function generateSpeechBlob(text) {
+  const response = await fetch('/api/text-to-speech', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
 
-      if (!response.ok) {
-        throw new Error('Gat ekki búið til tal');
-      }
+  if (!response.ok) {
+    throw new Error('Gat ekki búið til tal');
+  }
 
-      const blob = await response.blob();
-      speechAudio.src = URL.createObjectURL(blob);
+  return response.blob();
+}
 
-      speechAudio.onended = () => resolve();
-      speechAudio.onerror = (e) => reject(new Error('Villa við afspilun'));
+// Play an audio blob
+function playAudioBlob(blob) {
+  return new Promise((resolve, reject) => {
+    speechAudio.src = URL.createObjectURL(blob);
 
-      speechAudio.play();
-      setStatus('🎙️ Þulur talar...', false);
+    speechAudio.onended = () => {
+      URL.revokeObjectURL(speechAudio.src);
+      resolve();
+    };
 
-    } catch (error) {
-      reject(error);
-    }
+    speechAudio.onerror = (e) => {
+      URL.revokeObjectURL(speechAudio.src);
+      reject(new Error('Villa við afspilun'));
+    };
+
+    speechAudio.play().catch(reject);
   });
 }
 
@@ -256,14 +317,6 @@ function setStatus(message, showLoading = false) {
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-// Handle page visibility - pause when tab is hidden
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden && isPlaying) {
-    // Optionally pause when tab is hidden to save resources
-    // stopPlaying();
-  }
-});
 
 // Keyboard shortcut - Space to play/pause
 document.addEventListener('keydown', (e) => {
